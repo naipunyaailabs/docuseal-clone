@@ -1,23 +1,13 @@
 # frozen_string_literal: true
 
 class SubmissionsDownloadController < ApplicationController
-  skip_before_action :authenticate_user!
-  skip_authorization_check
+  before_action :authenticate_user!
+  before_action :load_submitter
 
-  TTL = 40.minutes
   FILES_TTL = 5.minutes
 
   def index
-    @submitter = Submitter.find_signed(params[:sig], purpose: :download_completed) if params[:sig].present?
-
-    signature_valid =
-      if @submitter&.slug == params[:submitter_slug]
-        true
-      else
-        @submitter = nil
-      end
-
-    @submitter ||= Submitter.find_by!(slug: params[:submitter_slug])
+    authorize! :read, @submitter
 
     Submissions::EnsureResultGenerated.call(@submitter)
 
@@ -26,12 +16,6 @@ class SubmissionsDownloadController < ApplicationController
     return head :not_found unless last_submitter
 
     Submissions::EnsureResultGenerated.call(last_submitter)
-
-    if last_submitter.completed_at < TTL.ago && !signature_valid && !current_user_submitter?(last_submitter)
-      Rollbar.info("TTL: #{last_submitter.id}") if defined?(Rollbar)
-
-      return head :not_found
-    end
 
     if params[:combined] == 'true'
       url = build_combined_url(@submitter)
@@ -48,8 +32,8 @@ class SubmissionsDownloadController < ApplicationController
 
   private
 
-  def current_user_submitter?(submitter)
-    current_user && current_user.account.submitters.exists?(id: submitter.id)
+  def load_submitter
+    @submitter = Submitter.find_by!(slug: params[:submitter_slug])
   end
 
   def build_urls(submitter)

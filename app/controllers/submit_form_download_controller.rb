@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 class SubmitFormDownloadController < ApplicationController
-  skip_before_action :authenticate_user!
-  skip_authorization_check
+  before_action :authenticate_user!
 
   FILES_TTL = 5.minutes
 
   def index
     @submitter = Submitter.find_by!(slug: params[:submit_form_slug])
+    authorize! :read, @submitter
 
     return redirect_to submitter_download_index_path(@submitter.slug) if @submitter.completed_at?
 
